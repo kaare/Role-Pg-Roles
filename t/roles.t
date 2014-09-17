@@ -34,13 +34,15 @@ sub cleanup : Test(shutdown) {
 	qx{$command};
 };
 
-sub _test : Test(15) {
+sub _test : Test(17) {
 	my $self = shift;
 	return if $self->{skip};
 
 	ok(my $test = Test->new(dbh => $self->{dbh}), 'New Test');
 	isa_ok($test,'Test','Test class');
-	ok($test->create(role => 'a'),'Create a');
+	ok($test->create(role => 'a', password => 'secure!'),'Create a');
+	is($test->check_user(user => 'a', password => 'insecure!'), 0, 'Check w/wrong password');
+	is($test->check_user(user => 'a', password => 'secure!'), 1, 'Check w/correct password');
 	ok($test->create(role => 'b'),'Create b');
 	ok($test->create(role => 'c'),'Create c');
 	ok($test->add(group => 'b', member => 'a'),'Add a to b');

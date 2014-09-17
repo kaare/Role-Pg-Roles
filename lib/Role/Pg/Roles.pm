@@ -2,6 +2,7 @@ package Role::Pg::Roles;
 
 use Moose::Role;
 use DBI;
+use Digest::MD5 qw/md5_hex/;
 
 has 'roles_dbh' => (
 	is => 'ro',
@@ -20,9 +21,14 @@ sub create {
 	my $dbh = $self->roles_dbh;
 	my $role = $dbh->quote_identifier($args{role}) or return;
 	my $sql = qq{
-		CREATE ROLE $role;
+		CREATE ROLE $role
 	};
-	$self->roles_dbh->do($sql);
+	my @values;
+	if (my $password = $args{password}) {
+		$sql .= ' WITH ENCRYPTED PASSWORD ?';
+		push @values, $password;
+	}
+	$self->roles_dbh->do($sql, undef, @values);
 }
 
 sub drop {
@@ -30,7 +36,7 @@ sub drop {
 	my $dbh = $self->roles_dbh;
 	my $role = $dbh->quote_identifier($args{role}) or return;
 	my $sql = qq{
-		DROP ROLE $role;
+		DROP ROLE $role
 	};
 	$self->roles_dbh->do($sql);
 }
@@ -40,7 +46,7 @@ sub add {
 	my $dbh = $self->roles_dbh;
 	my ($group, $member) = map {$dbh->quote_identifier($args{$_}) // return} qw/group member/;
 	my $sql = qq{
-		GRANT $group TO $member;
+		GRANT $group TO $member
 	};
 	$self->roles_dbh->do($sql);
 }
@@ -50,9 +56,21 @@ sub remove {
 	my $dbh = $self->roles_dbh;
 	my ($group, $member) = map {$dbh->quote_identifier($args{$_}) // return} qw/group member/;
 	my $sql = qq{
-		REVOKE $group FROM $member;
+		REVOKE $group FROM $member
 	};
 	$self->roles_dbh->do($sql);
+}
+
+sub check_user {
+	my ($self, %args) = @_;
+	my $dbh = $self->roles_dbh;
+	my ($user, $password) = map {$args{$_} // return} qw/user password/;
+	my $sql = qq{
+		SELECT 1 FROM pg_catalog.pg_authid
+		WHERE rolname = ? AND rolpassword = ?
+	};
+	push my @values, $user, 'md5' . md5_hex($password . $user);
+	return $self->roles_dbh->selectrow_arrayref($sql, undef, @values) ? 1 : 0;
 }
 
 sub roles {
@@ -60,7 +78,7 @@ sub roles {
 	my $sql = q{
 		SELECT rolname
 		FROM pg_authid a
-		WHERE pg_has_role(?, a.oid, 'member');
+		WHERE pg_has_role(?, a.oid, 'member')
 	};
 	my @values = map {$args{$_} // return} qw/user/;
 
@@ -73,6 +91,24 @@ sub member_of {
 	my $roles = $self->roles(user => $user);
 
 	return grep {$group eq $_} @$roles;
+}
+
+sub set {
+	my ($self, %args) = @_;
+	my $dbh = $self->roles_dbh;
+	my $role = $dbh->quote_identifier($args{role}) or return;
+	my $sql = qq{
+		SET ROLE $role
+	};
+	$self->roles_dbh->do($sql);
+}
+
+sub reset {
+	my ($self) = @_;
+	my $sql = qq{
+		RESET ROLE
+	};
+	$self->roles_dbh->do($sql);
 }
 
 1;
@@ -101,9 +137,11 @@ _build_roles_dbh.
 
 =head2 create
 
- $self->create(role => 'me');
+ $self->create(role => 'me', password => 'safety');
 
 Creates a role. The role can be seen as either a user or a group.
+
+An optional password can be added. The user is then created with an encrypted password.
 
 =head2 drop
 
@@ -123,6 +161,12 @@ Adds a member to a group. A member can be a user or a group
 
 Removes a member from a group.
 
+=head2 check_user
+
+ my $roles = $self->check_user(user => 'me', password => 'trust me!');
+
+Checks if there is a user with the given password
+
 =head2 roles
 
  my $roles = $self->roles(user => 'me');
@@ -134,6 +178,18 @@ Returns an arrayref with all the roles the user is a member of.
  print "yep" if $self->member_of(user => 'me', group => 'group');
 
 Returns true if user is member of group.
+
+=head2 set
+
+ $self->set(role => 'elvis');
+
+Assume another role.
+
+=head2 reset
+
+ $self->reset;
+
+Back to your old self.
 
 =head1 AUTHOR
 
