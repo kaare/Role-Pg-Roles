@@ -1,5 +1,6 @@
 package Role::Pg::Roles;
 
+use 5.010;
 use Moose::Role;
 use DBI;
 use Digest::MD5 qw/md5_hex/;
