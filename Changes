@@ -1,6 +1,8 @@
 Revision history for Role-Pg-Roles
 
 {{$NEXT}}
+  - Give methods a more specific name (adding _role to most)
+  - New methods, set_password and set_privilege
 
 0.001   2014-09-17 20:43:13 Europe/Copenhagen
   - first version

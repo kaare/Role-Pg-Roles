@@ -17,7 +17,7 @@ sub _build_roles_dbh {
 	return $self->schema->storage->dbh if $self->can('schema');
 }
 
-sub create {
+sub create_role {
 	my ($self, %args) = @_;
 	my $dbh = $self->roles_dbh;
 	my $role = $dbh->quote_identifier($args{role}) or return;
@@ -32,7 +32,7 @@ sub create {
 	$self->roles_dbh->do($sql, undef, @values);
 }
 
-sub drop {
+sub drop_role {
 	my ($self, %args) = @_;
 	my $dbh = $self->roles_dbh;
 	my $role = $dbh->quote_identifier($args{role}) or return;
@@ -42,7 +42,7 @@ sub drop {
 	$self->roles_dbh->do($sql);
 }
 
-sub add {
+sub add_to_group {
 	my ($self, %args) = @_;
 	my $dbh = $self->roles_dbh;
 	my ($group, $member) = map {$dbh->quote_identifier($args{$_}) // return} qw/group member/;
@@ -52,7 +52,7 @@ sub add {
 	$self->roles_dbh->do($sql);
 }
 
-sub remove {
+sub remove_from_group {
 	my ($self, %args) = @_;
 	my $dbh = $self->roles_dbh;
 	my ($group, $member) = map {$dbh->quote_identifier($args{$_}) // return} qw/group member/;
@@ -94,7 +94,7 @@ sub member_of {
 	return grep {$group eq $_} @$roles;
 }
 
-sub set {
+sub set_role {
 	my ($self, %args) = @_;
 	my $dbh = $self->roles_dbh;
 	my $role = $dbh->quote_identifier($args{role}) or return;
@@ -104,10 +104,32 @@ sub set {
 	$self->roles_dbh->do($sql);
 }
 
-sub reset {
+sub reset_role {
 	my ($self) = @_;
 	my $sql = qq{
 		RESET ROLE
+	};
+	$self->roles_dbh->do($sql);
+}
+
+sub set_password {
+	my ($self, %args) = @_;
+	my $dbh = $self->roles_dbh;
+	my $role = $dbh->quote_identifier($args{role}) or return;
+	my $password = $dbh->quote($args{password}) or return;
+	my $sql = qq{
+		ALTER ROLE $role WITH ENCRYPTED PASSWORD $password
+	};
+	$self->roles_dbh->do($sql);
+}
+
+sub set_privilege {
+	my ($self, %args) = @_;
+	my $dbh = $self->roles_dbh;
+	my $role = $dbh->quote_identifier($args{role}) or return;
+	my $privilege = $dbh->quote_identifier($args{privilege}) or return;
+	my $sql = qq{
+		ALTER ROLE $role WITH $privilege
 	};
 	$self->roles_dbh->do($sql);
 }
@@ -136,29 +158,29 @@ _build_roles_dbh.
 
 =head1 METHODS
 
-=head2 create
+=head2 create_role
 
- $self->create(role => 'me', password => 'safety');
+ $self->create_role(role => 'me', password => 'safety');
 
 Creates a role. The role can be seen as either a user or a group.
 
-An optional password can be added. The user is then created with an encrypted password.
+An optional password can be added. The user (or group) is then created with an encrypted password.
 
-=head2 drop
+=head2 drop_role
 
- $self->drop(role => 'me');
+ $self->drop_role(role => 'me');
 
 Drops a role.
 
-=head2 add
+=head2 add_to_group
 
- $self->add(group => 'group', member => 'me');
+ $self->add_to_group(group => 'group', member => 'me');
 
 Adds a member to a group. A member can be a user or a group
 
-=head2 remove
+=head2 remove_from_group
 
- $self->remove(group => 'group', member => 'me');
+ $self->remove_from_group(group => 'group', member => 'me');
 
 Removes a member from a group.
 
@@ -180,17 +202,41 @@ Returns an arrayref with all the roles the user is a member of.
 
 Returns true if user is member of group.
 
-=head2 set
+=head2 set_role
 
- $self->set(role => 'elvis');
+ $self->set_role(role => 'elvis');
 
 Assume another role.
 
-=head2 reset
+=head2 reset_role
 
  $self->reset;
 
 Back to your old self.
+
+=head2 set_password
+
+ $self->set_password(role => 'elvis', password => 'King');
+
+Set (a new) password.
+
+=head2 set_privilege
+
+ $self->set_privilege(role => 'elvis', privilege => 'createrole');
+
+Add a privilege to (or remove from) a role.
+
+Priviles can be any of
+
+	SUPERUSER
+	CREATEDB
+	CREATEROLE
+	CREATEUSER
+	INHERIT
+	LOGIN
+	REPLICATION
+
+To remove a privilege, prepend with "NO" (like NOCREATEROLE).
 
 =head1 AUTHOR
 
